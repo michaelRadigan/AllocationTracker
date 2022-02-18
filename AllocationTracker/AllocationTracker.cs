@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.Diagnostics.Symbols;
 using Microsoft.Diagnostics.Tracing;
 using Microsoft.Diagnostics.Tracing.Etlx;
@@ -64,14 +63,8 @@ namespace AllocationTracker
             return new TraceLog(_etlxFileName);
         }
 
-        // TODO[michaelr]: Clean this up, like, a lot
-        public void Process()
+        private MutableTraceEventStackSource GenerateStackSources()
         {
-            if (_state != TrackerState.STOPPED)
-            {
-                throw new Exception($"{nameof(AllocationTracker)} can only process after having stopped!");
-            }
-            
             using (var symbolReader = new SymbolReader(System.IO.TextWriter.Null) { SymbolPath = SymbolPath.MicrosoftSymbolServerPath })
             using (var eventLog = CreateTraceLog())
             {
@@ -82,60 +75,56 @@ namespace AllocationTracker
 
                 var computer = new SampleProfilerThreadTimeComputer(eventLog, symbolReader);
                 computer.GenerateThreadTimeStacks(stackSource);
+                return stackSource;
+            }
+        } 
 
-                var samplesForThread = new Dictionary<int, List<StackSourceSample>>();
+        // TODO[michaelr]: Clean this up, like, a lot
+        public void Process()
+        {
+            if (_state != TrackerState.STOPPED)
+            {
+                throw new Exception($"{nameof(AllocationTracker)} can only process after having stopped!");
+            }
+            var stackSource = GenerateStackSources();
 
-                stackSource.ForEach((sample) =>
+            var samplesForThread = new DefaultDictionary<int, List<StackSourceSample>>();
+
+            // TODO[michaelr]: Do we really need thread id here?
+            stackSource.ForEach(sample =>
+            {
+                var stackIndex = sample.StackIndex;
+                while (!stackSource.GetFrameName(stackSource.GetFrameIndex(stackIndex), false)
+                           .StartsWith("Thread ("))
+                    stackIndex = stackSource.GetCallerIndex(stackIndex);
+
+                // long form for: int.Parse(threadFrame["Thread (".Length..^1)])
+                // Thread id is in the frame name as "Thread (<ID>)"
+                string template = "Thread (";
+                string threadFrame = stackSource.GetFrameName(stackSource.GetFrameIndex(stackIndex), false);
+                int threadId =
+                    int.Parse(threadFrame.Substring(template.Length, threadFrame.Length - (template.Length + 1)));
+                samplesForThread[threadId].Add(sample);
+            });
+
+            var counter = new DefaultDictionary<Tuple<int, StackSourceCallStackIndex>, int>();
+
+            foreach (var (threadId, samples) in samplesForThread)
+            {
+                foreach (var sample in samples)
                 {
-                    var stackIndex = sample.StackIndex;
-                    while (!stackSource.GetFrameName(stackSource.GetFrameIndex(stackIndex), false)
-                               .StartsWith("Thread ("))
-                        stackIndex = stackSource.GetCallerIndex(stackIndex);
-
-                    // long form for: int.Parse(threadFrame["Thread (".Length..^1)])
-                    // Thread id is in the frame name as "Thread (<ID>)"
-                    string template = "Thread (";
-                    string threadFrame = stackSource.GetFrameName(stackSource.GetFrameIndex(stackIndex), false);
-                    int threadId =
-                        int.Parse(threadFrame.Substring(template.Length, threadFrame.Length - (template.Length + 1)));
-
-                    if (samplesForThread.TryGetValue(threadId, out var samples))
-                    {
-                        samples.Add(sample);
-                    }
-                    else
-                    {
-                        samplesForThread[threadId] = new List<StackSourceSample>() {sample};
-                    }
-                });
-
-                var counter = new Dictionary<Tuple<int, StackSourceCallStackIndex>, int>();
-
-                foreach (var (threadId, samples) in samplesForThread)
-                {
-                    // Why are we only printing the first??
-                    foreach (var sample in samples)
-                    {
-                        var key = new Tuple<int, StackSourceCallStackIndex>(threadId, sample.StackIndex);
-                        if (counter.TryGetValue(key, out var count))
-                        {
-                            counter[key] = count + 1;
-                        }
-                        else
-                        {
-                            counter[key] = 1;
-                        }
-                        //PrintStack(threadId, sample, stackSource);
-                    }
-                    //PrintStack(threadId, samples[0], stackSource);
+                    var key = new Tuple<int, StackSourceCallStackIndex>(threadId, sample.StackIndex);
+                    counter[key] +=  1;
+                    //PrintStack(threadId, sample, stackSource);
                 }
+                //PrintStack(threadId, samples[0], stackSource);
+            }
 
-                foreach (var ((threadId, stackIndex), count) in counter.OrderBy(kvp => kvp.Value).Take(10))
-                {
-                    var name = stackSource.GetFrameName(
-                        stackSource.GetFrameIndex(stackSource.GetCallerIndex(stackIndex)), true);
-                    Console.WriteLine($"{name} : {count}");
-                }
+            foreach (var ((threadId, stackIndex), count) in counter.OrderBy(kvp => kvp.Value).Take(10))
+            {
+                var name = stackSource.GetFrameName(
+                    stackSource.GetFrameIndex(stackSource.GetCallerIndex(stackIndex)), true);
+                Console.WriteLine($"{name} : {count}");
             }
         }
 
