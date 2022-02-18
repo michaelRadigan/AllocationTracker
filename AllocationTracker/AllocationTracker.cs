@@ -58,6 +58,12 @@ namespace AllocationTracker
             _state = TrackerState.STOPPED;
         }
 
+        private TraceLog CreateTraceLog()
+        {
+            _etlxFileName = TraceLog.CreateFromEventPipeDataFile(_netTraceFileName);
+            return new TraceLog(_etlxFileName);
+        }
+
         // TODO[michaelr]: Clean this up, like, a lot
         public void Process()
         {
@@ -65,10 +71,9 @@ namespace AllocationTracker
             {
                 throw new Exception($"{nameof(AllocationTracker)} can only process after having stopped!");
             }
-            _etlxFileName = TraceLog.CreateFromEventPipeDataFile(_netTraceFileName);
             
             using (var symbolReader = new SymbolReader(System.IO.TextWriter.Null) { SymbolPath = SymbolPath.MicrosoftSymbolServerPath })
-            using (var eventLog = new TraceLog(_etlxFileName))
+            using (var eventLog = CreateTraceLog())
             {
                 var stackSource = new MutableTraceEventStackSource(eventLog)
                 {

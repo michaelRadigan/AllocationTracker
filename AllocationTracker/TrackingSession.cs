@@ -14,7 +14,8 @@ namespace AllocationTracker
     {
         private readonly string _netTraceFileName;
         private readonly int _processId;
-        private bool _stop;
+        //private bool _stop;
+        private CancellationTokenSource _cancellationTokenSource;
         
         private Task _sessionTask;
         
@@ -39,40 +40,41 @@ namespace AllocationTracker
         public TrackingSession(int processId, string netTraceFileName)
         {
             _processId = processId;
-            _stop = false;
+            //_stop = false;
             _netTraceFileName = netTraceFileName;
+            _cancellationTokenSource = new CancellationTokenSource();
         }
-
+        /// <summary>
+        /// Start the current tracking session
+        /// </summary>
         public void Start()
         {
-            async Task RunEventPipeSession()
+            async Task RunEventPipeSession(CancellationToken token)
             {
                 var client = new DiagnosticsClient(_processId);
-                using (EventPipeSession session = client.StartEventPipeSession(_providers)) 
+                var session = client.StartEventPipeSession(_providers);
                 using (FileStream fs = File.OpenWrite(_netTraceFileName))
                 {
+                    // Note that we're intentionally not propagating through the cancellation token, we would always like the full copy to complete.
                     var copyTask = session.EventStream.CopyToAsync(fs);
-                    // Keep waiting until we're told to stop
-                    while (!_stop)
+                    token.Register(() =>
                     {
-                        // TODO[michaelr]: This should probably be configurable in some way!
-                        await Task.Delay(1000);
-                    }
-                    session.Stop();
+                        session?.Stop();
+                        session?.Dispose();
+                    });
                     await copyTask;
                 }
             }
-            //_sessionTask = Task.Factory.StartNew(async () => await RunEventPipeSession());
-            _sessionTask = RunEventPipeSession();
+            _sessionTask = RunEventPipeSession(_cancellationTokenSource.Token);
         }
         
         /// <summary>
         /// Stop the current tracking session
         /// </summary>
-        /// <returns> An awaitable task which is constructing the nettrace file</returns>
         public void Stop()
         {
-            _stop = true;
+            _cancellationTokenSource.Cancel();
+            //_stop = true;
             _sessionTask.Wait();
         }
     }
