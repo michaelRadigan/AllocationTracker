@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using Microsoft.Diagnostics.Symbols;
 using Microsoft.Diagnostics.Tracing;
 using Microsoft.Diagnostics.Tracing.Etlx;
@@ -99,7 +100,21 @@ namespace AllocationTracker
         }
         
         
-        public void Process()
+        private string BuildFullCallStack(StackSourceCallStackIndex stackIndex, MutableTraceEventStackSource stackSource)
+        {
+            var sb = new StringBuilder();
+            while (!stackSource.GetFrameName(stackSource.GetFrameIndex(stackIndex), false).StartsWith("Thread ("))
+            {
+                var frameName =
+                    stackSource.GetFrameName(stackSource.GetFrameIndex(stackIndex), false)
+                        .Replace("UNMANAGED_CODE_TIME", "[Native Frames]");
+                sb.AppendLine(frameName);
+                stackIndex = stackSource.GetCallerIndex(stackIndex);
+            }
+            return sb.ToString();
+        }
+
+        public IEnumerable<(int,string)> Process()
         {
             if (_state != TrackerState.STOPPED)
             {
@@ -108,12 +123,19 @@ namespace AllocationTracker
             var stackSource = GenerateStackSources();
             var stackSourceCounter = CountStackSourceOccurrences(stackSource);
             PrintMostCommon(stackSourceCounter, stackSource, 10);
+            
+            foreach (var (stackIndex, count) in 
+                     stackSourceCounter.OrderByDescending(kvp => kvp.Value).Take(10))
+            {
+                yield return (count, BuildFullCallStack(stackIndex, stackSource));
+            }
+
         }
 
-        public void StopAndProcess()
+        public IEnumerable<(int, string)> StopAndProcess()
         {
             Stop();
-            Process();
+            return Process();
         }
 
         public void Dispose()

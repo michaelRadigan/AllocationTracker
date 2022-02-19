@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.Diagnostics.Tracing.Parsers.MicrosoftWindowsWPF;
 using NUnit.Framework;
 
 namespace AllocationTracker.Test
@@ -11,10 +13,18 @@ namespace AllocationTracker.Test
         {
         }
 
+        private void PrintProcessed(IEnumerable<(int, string)> processedStacks)
+        {
+            foreach (var (count, stack) in processedStacks)
+            {
+                Console.WriteLine($"{count} times: ");    
+                Console.WriteLine(stack);
+            }
+        }
+
         [Test]
         public void MessyTest()
         {
-            var arr = new int[100];
             var allocationTracker = new AllocationTracker();
             allocationTracker.Start();
 
@@ -25,10 +35,10 @@ namespace AllocationTracker.Test
                 GC.Collect();
             }
 
-            allocationTracker.StopAndProcess();
-            // TODO[michaelr]: Probably want a better return type than just printing to console...
+            var countsAndStacks = allocationTracker.StopAndProcess();
+            PrintProcessed(countsAndStacks);
         }
-        
+
         [Test]
         public void SimpleTest()
         {
@@ -38,8 +48,8 @@ namespace AllocationTracker.Test
             Allocate10K();
             Allocate5K();
 
-            allocationTracker.StopAndProcess();
-            // TODO[michaelr]: Probably want a better return type than just printing to console...
+            var countsAndStacks = allocationTracker.StopAndProcess();
+            PrintProcessed(countsAndStacks);
         }
         
         
