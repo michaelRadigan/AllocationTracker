@@ -77,9 +77,28 @@ namespace AllocationTracker
                 computer.GenerateThreadTimeStacks(stackSource);
                 return stackSource;
             }
-        } 
+        }
 
-        // TODO[michaelr]: Clean this up, like, a lot
+        private static Dictionary<StackSourceCallStackIndex, int> CountStackSourceOccurrences(
+            MutableTraceEventStackSource stackSource)
+        {
+            var stackSourceCounter = new DefaultDictionary<StackSourceCallStackIndex, int>();
+            stackSource.ForEach(sample => stackSourceCounter[sample.StackIndex] += 1);
+            return stackSourceCounter;
+        }
+
+        private static void PrintMostCommon(Dictionary<StackSourceCallStackIndex, int> stackSourceCounter, MutableTraceEventStackSource stackSource, int count)
+        {
+            foreach (var (stackIndex, occurences) in 
+                     stackSourceCounter.OrderByDescending(kvp => kvp.Value).Take(count))
+            {
+                var name = stackSource.GetFrameName(
+                    stackSource.GetFrameIndex(stackSource.GetCallerIndex(stackIndex)), true);
+                Console.WriteLine($"{name} : {occurences}");
+            }
+        }
+        
+        
         public void Process()
         {
             if (_state != TrackerState.STOPPED)
@@ -87,45 +106,8 @@ namespace AllocationTracker
                 throw new Exception($"{nameof(AllocationTracker)} can only process after having stopped!");
             }
             var stackSource = GenerateStackSources();
-
-            var samplesForThread = new DefaultDictionary<int, List<StackSourceSample>>();
-
-            // TODO[michaelr]: Do we really need thread id here?
-            stackSource.ForEach(sample =>
-            {
-                var stackIndex = sample.StackIndex;
-                while (!stackSource.GetFrameName(stackSource.GetFrameIndex(stackIndex), false)
-                           .StartsWith("Thread ("))
-                    stackIndex = stackSource.GetCallerIndex(stackIndex);
-
-                // long form for: int.Parse(threadFrame["Thread (".Length..^1)])
-                // Thread id is in the frame name as "Thread (<ID>)"
-                string template = "Thread (";
-                string threadFrame = stackSource.GetFrameName(stackSource.GetFrameIndex(stackIndex), false);
-                int threadId =
-                    int.Parse(threadFrame.Substring(template.Length, threadFrame.Length - (template.Length + 1)));
-                samplesForThread[threadId].Add(sample);
-            });
-
-            var counter = new DefaultDictionary<Tuple<int, StackSourceCallStackIndex>, int>();
-
-            foreach (var (threadId, samples) in samplesForThread)
-            {
-                foreach (var sample in samples)
-                {
-                    var key = new Tuple<int, StackSourceCallStackIndex>(threadId, sample.StackIndex);
-                    counter[key] +=  1;
-                    //PrintStack(threadId, sample, stackSource);
-                }
-                //PrintStack(threadId, samples[0], stackSource);
-            }
-
-            foreach (var ((threadId, stackIndex), count) in counter.OrderBy(kvp => kvp.Value).Take(10))
-            {
-                var name = stackSource.GetFrameName(
-                    stackSource.GetFrameIndex(stackSource.GetCallerIndex(stackIndex)), true);
-                Console.WriteLine($"{name} : {count}");
-            }
+            var stackSourceCounter = CountStackSourceOccurrences(stackSource);
+            PrintMostCommon(stackSourceCounter, stackSource, 10);
         }
 
         public void StopAndProcess()

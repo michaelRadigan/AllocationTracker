@@ -14,17 +14,29 @@ namespace AllocationTracker.Test
         [Test]
         public void MessyTest()
         {
+            var arr = new int[100];
             var allocationTracker = new AllocationTracker();
             allocationTracker.Start();
-            
-            for (var i = 0; i < 3; i++)
+
+            for (var i = 0; i < 30; i++)
             {
                 Allocate10K();
                 Allocate5K();
                 GC.Collect();
-                Console.WriteLine(i);
-                Task.Delay(1000).Wait();
             }
+
+            allocationTracker.StopAndProcess();
+            // TODO[michaelr]: Probably want a better return type than just printing to console...
+        }
+        
+        [Test]
+        public void SimpleTest()
+        {
+            var allocationTracker = new AllocationTracker();
+            allocationTracker.Start();
+            
+            Allocate10K();
+            Allocate5K();
 
             allocationTracker.StopAndProcess();
             // TODO[michaelr]: Probably want a better return type than just printing to console...
@@ -45,6 +57,21 @@ namespace AllocationTracker.Test
             {
                 int[] x = new int[100];
             }
+        }
+
+        [Test]
+        public void FinalizerTest()
+        {
+            var allocationTracker = new AllocationTracker();
+            allocationTracker.Start();
+
+            for (var i = 0; i < 150; i++)
+            {
+                GC.Collect();
+            }
+
+            allocationTracker.StopAndProcess();
+            // TODO[michaelr]: Probably want a better return type than just printing to console...
         }
     }
 }
