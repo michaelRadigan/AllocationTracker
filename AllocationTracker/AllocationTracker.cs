@@ -129,7 +129,6 @@ namespace AllocationTracker
             {
                 yield return (count, BuildFullCallStack(stackIndex, stackSource));
             }
-
         }
 
         public IEnumerable<(int, string)> StopAndProcess()

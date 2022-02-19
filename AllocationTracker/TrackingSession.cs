@@ -9,14 +9,11 @@ using Microsoft.Diagnostics.Tracing.Parsers;
 
 namespace AllocationTracker
 {
-    // TODO[michaelr]: This is a bit of a terrible name, please fix
     public class TrackingSession
     {
         private readonly string _netTraceFileName;
         private readonly int _processId;
-        //private bool _stop;
-        private CancellationTokenSource _cancellationTokenSource;
-        
+        private readonly CancellationTokenSource _cancellationTokenSource;
         private Task _sessionTask;
         
         private readonly List<EventPipeProvider> _providers = new List<EventPipeProvider>()
@@ -24,15 +21,12 @@ namespace AllocationTracker
             new EventPipeProvider("Microsoft-Windows-DotNETRuntime",
                 EventLevel.Verbose, // this is needed in order to receive AllocationTick_V2 event
                 (long) (ClrTraceEventParser.Keywords.GC |
-                        // the CLR source code indicates that the provider must be set before the monitored application starts
-                        //ClrTraceEventParser.Keywords.GCSampledObjectAllocationLow | 
-                        //ClrTraceEventParser.Keywords.GCSampledObjectAllocationHigh | 
-
                         // required to receive the BulkType events that allows 
                         // mapping between the type ID received in the allocation events
                         ClrTraceEventParser.Keywords.GCHeapAndTypeNames |   
                         ClrTraceEventParser.Keywords.Type |
                         // TODO[michaelr]: Just Experimenting
+                        // the CLR source code indicates that the provider must be set before the monitored application starts
                         ClrTraceEventParser.Keywords.GCAllObjectAllocation
                 )),
         };
@@ -40,10 +34,11 @@ namespace AllocationTracker
         public TrackingSession(int processId, string netTraceFileName)
         {
             _processId = processId;
-            //_stop = false;
             _netTraceFileName = netTraceFileName;
             _cancellationTokenSource = new CancellationTokenSource();
         }
+        
+        
         /// <summary>
         /// Start the current tracking session
         /// </summary>
@@ -74,7 +69,6 @@ namespace AllocationTracker
         public void Stop()
         {
             _cancellationTokenSource.Cancel();
-            //_stop = true;
             _sessionTask.Wait();
         }
     }
