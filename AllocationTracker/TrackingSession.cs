@@ -37,8 +37,7 @@ namespace AllocationTracker
             _netTraceFileName = netTraceFileName;
             _cancellationTokenSource = new CancellationTokenSource();
         }
-        
-        
+
         /// <summary>
         /// Start the current tracking session
         /// </summary>

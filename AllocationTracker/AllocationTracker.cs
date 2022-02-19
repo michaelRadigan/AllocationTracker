@@ -53,8 +53,7 @@ namespace AllocationTracker
                 throw new Exception($"{nameof(AllocationTracker)} can only be stopped if it has already been started!");
             }
 
-            Console.WriteLine($"{nameof(AllocationTracker)}: pre");
-            _trackingSession.Stop();  //.ContinueWith(_ => _state = TrackerState.STOPPED);
+            _trackingSession.Stop(); 
             _state = TrackerState.STOPPED;
         }
 
